@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       name="description"
-      content="CueTrack rastreia localmente a bola branca de uma mesa de sinuca usando a câmera do celular."
+      content="CueTrack rastreia localmente a bola branca e mede seu movimento em tempo real usando a câmera do celular."
     />
     <meta name="theme-color" content="#07110d" />
-    <title>CueTrack — rastreamento da bola branca</title>
+    <title>CueTrack — rastreamento e velocidade da bola branca</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -21,15 +21,15 @@
     </header>
 
     <main>
-      <section class="camera-panel" aria-label="Visualização da câmera">
+      <section class="camera-panel" aria-label="Visualização da câmera e telemetria">
         <div id="camera-stage" class="camera-stage">
           <video id="camera" playsinline muted aria-label="Imagem da câmera traseira"></video>
-          <canvas id="overlay" aria-label="Detecção e trajetória da bola branca"></canvas>
+          <canvas id="overlay" aria-label="Detecção, trajetória e vetor de velocidade da bola branca"></canvas>
 
           <div id="empty-state" class="empty-state">
             <div class="target-mark" aria-hidden="true"></div>
             <p>Aponte a câmera para a mesa de sinuca</p>
-            <span>A detecção acontece somente neste dispositivo.</span>
+            <span>A detecção e a telemetria acontecem somente neste dispositivo.</span>
           </div>
 
           <div class="status-bar">
@@ -37,6 +37,63 @@
             <span id="status-text" role="status">Carregando visão computacional…</span>
           </div>
         </div>
+
+        <section class="telemetry-panel" aria-label="Telemetria de movimento">
+          <div class="speed-hero">
+            <div>
+              <span class="metric-label">VELOCIDADE ATUAL</span>
+              <div class="speed-value"><strong id="speed-current">0</strong><span>px/s</span></div>
+              <span id="motion-trend" class="motion-trend">Aguardando bola branca</span>
+            </div>
+            <span id="motion-state" class="motion-state" data-mode="lost">SEM DETECÇÃO</span>
+          </div>
+
+          <div class="speed-gauge" aria-label="Indicador de velocidade">
+            <div class="speed-gauge-track">
+              <span id="speed-gauge-fill" class="speed-gauge-fill"></span>
+            </div>
+            <div class="speed-gauge-labels"><span>0</span><span id="speed-gauge-scale">500 px/s</span></div>
+          </div>
+
+          <div class="telemetry-grid">
+            <div class="telemetry-card">
+              <span>Máxima</span>
+              <strong id="speed-max">0 px/s</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Média</span>
+              <strong id="speed-average">0 px/s</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Vx</span>
+              <strong id="velocity-x">0 px/s</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Vy</span>
+              <strong id="velocity-y">0 px/s</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Aceleração</span>
+              <strong id="acceleration">0 px/s²</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Distância</span>
+              <strong id="distance-total">0 px</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Em movimento</span>
+              <strong id="moving-time">0.00 s</strong>
+            </div>
+            <div class="telemetry-card">
+              <span>Trajetória</span>
+              <strong id="trail-count">0/100</strong>
+            </div>
+          </div>
+
+          <p class="telemetry-note">
+            Velocidade em pixels por segundo. m/s exige calibração dimensional da mesa.
+          </p>
+        </section>
 
         <div class="primary-actions">
           <button id="camera-button" class="button button-primary" type="button" disabled>
@@ -104,7 +161,8 @@
 
           <div class="legend" aria-label="Legenda da sobreposição">
             <span><i class="legend-ring"></i>Bola detectada</span>
-            <span><i class="legend-line"></i>Trajetória (100 posições)</span>
+            <span><i class="legend-line"></i>Trajetória</span>
+            <span><i class="legend-vector"></i>Vetor de velocidade</span>
           </div>
         </div>
       </details>

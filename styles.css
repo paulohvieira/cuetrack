@@ -8,7 +8,7 @@
   --muted: #91a99c;
   --green: #42e38d;
   --green-bright: #7cffae;
-  --green-deep: #0d5132;
+  --yellow: #ffe980;
   --danger: #ff7272;
   --radius: 18px;
   font-family:
@@ -26,7 +26,7 @@ html {
 }
 
 body {
-  width: min(100%, 920px);
+  width: min(100%, 1080px);
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
@@ -234,6 +234,155 @@ h1 span {
   50% {
     opacity: 0.45;
   }
+}
+
+.telemetry-panel {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(13, 27, 21, 0.86);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+}
+
+.speed-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.speed-value {
+  display: flex;
+  margin-top: 2px;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-value strong {
+  color: var(--yellow);
+  font-size: clamp(2rem, 12vw, 3.2rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+}
+
+.speed-value span {
+  color: #c8d7ce;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.motion-trend {
+  display: block;
+  min-height: 1em;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.motion-state {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.6rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+}
+
+.motion-state[data-mode="moving"] {
+  border-color: rgba(255, 233, 128, 0.28);
+  color: var(--yellow);
+  background: rgba(255, 233, 128, 0.08);
+}
+
+.motion-state[data-mode="stopped"] {
+  border-color: rgba(124, 255, 174, 0.24);
+  color: var(--green-bright);
+  background: rgba(66, 227, 141, 0.07);
+}
+
+.speed-gauge {
+  margin-top: 14px;
+}
+
+.speed-gauge-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.speed-gauge-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--yellow));
+  transition: width 90ms linear;
+}
+
+.speed-gauge-labels {
+  display: flex;
+  margin-top: 4px;
+  justify-content: space-between;
+  color: #688073;
+  font-size: 0.57rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.telemetry-card {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(196, 255, 221, 0.08);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.telemetry-card span,
+.telemetry-card strong {
+  display: block;
+}
+
+.telemetry-card span {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.telemetry-card strong {
+  overflow: hidden;
+  color: #edf7f0;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.telemetry-note {
+  margin: 10px 1px 0;
+  color: #688073;
+  font-size: 0.59rem;
+  line-height: 1.4;
 }
 
 .primary-actions {
@@ -454,6 +603,25 @@ input[type="range"] {
   background: rgba(124, 255, 174, 0.62);
 }
 
+.legend-vector {
+  position: relative;
+  width: 16px !important;
+  height: 2px !important;
+  background: var(--yellow);
+}
+
+.legend-vector::after {
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid var(--yellow);
+  border-right: 2px solid var(--yellow);
+  content: "";
+  transform: rotate(45deg);
+}
+
 footer {
   padding: 16px 0 0;
   color: #688073;
@@ -461,7 +629,13 @@ footer {
   text-align: center;
 }
 
-@media (min-width: 680px) {
+@media (min-width: 520px) {
+  .telemetry-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 760px) {
   body {
     padding-right: 24px;
     padding-left: 24px;
@@ -469,7 +643,7 @@ footer {
 
   main {
     display: grid;
-    grid-template-columns: minmax(0, 1.65fr) minmax(270px, 0.8fr);
+    grid-template-columns: minmax(0, 1.7fr) minmax(270px, 0.72fr);
     align-items: start;
     gap: 16px;
   }
@@ -498,5 +672,9 @@ footer {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .speed-gauge-fill {
+    transition: none;
   }
 }

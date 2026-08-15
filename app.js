@@ -4,6 +4,12 @@ const MAX_TRAIL_POINTS = 100;
 const MAX_PROCESSING_WIDTH = 640;
 const TARGET_FPS = 30;
 const TARGET_FRAME_TIME = 1000 / TARGET_FPS;
+const MOTION_START_SPEED = 70;
+const MOTION_STOP_SPEED = 35;
+const LOST_DETECTION_MS = 250;
+const VELOCITY_SMOOTHING = 0.34;
+const ACCELERATION_SMOOTHING = 0.24;
+const MAX_REASONABLE_SPEED_FACTOR = 14;
 
 const elements = {
   video: document.querySelector("#camera"),
@@ -16,6 +22,19 @@ const elements = {
   fpsValue: document.querySelector("#fps-value"),
   statusText: document.querySelector("#status-text"),
   statusDot: document.querySelector("#status-dot"),
+  speedCurrent: document.querySelector("#speed-current"),
+  speedMax: document.querySelector("#speed-max"),
+  speedAverage: document.querySelector("#speed-average"),
+  velocityX: document.querySelector("#velocity-x"),
+  velocityY: document.querySelector("#velocity-y"),
+  acceleration: document.querySelector("#acceleration"),
+  distanceTotal: document.querySelector("#distance-total"),
+  movingTime: document.querySelector("#moving-time"),
+  motionState: document.querySelector("#motion-state"),
+  motionTrend: document.querySelector("#motion-trend"),
+  speedGaugeFill: document.querySelector("#speed-gauge-fill"),
+  speedGaugeScale: document.querySelector("#speed-gauge-scale"),
+  trailCount: document.querySelector("#trail-count"),
 };
 
 const overlayContext = elements.overlay.getContext("2d");
@@ -45,7 +64,25 @@ const state = {
     vMin: 180,
     vMax: 255,
   },
+  motion: createMotionState(),
 };
+
+function createMotionState() {
+  return {
+    lastSample: null,
+    lastSeenAt: 0,
+    vx: 0,
+    vy: 0,
+    speed: 0,
+    previousSpeed: 0,
+    acceleration: 0,
+    maxSpeed: 0,
+    distance: 0,
+    movingTime: 0,
+    moving: false,
+    detected: false,
+  };
+}
 
 function setStatus(message, mode = "") {
   elements.statusText.textContent = message;
@@ -173,6 +210,7 @@ async function startCamera() {
 
     configureProcessingSize();
     allocateMats();
+    resetTracking();
 
     state.running = true;
     state.lastProcessedAt = 0;
@@ -299,8 +337,15 @@ function processFrame(now) {
       source.delete();
     }
 
-    if (detection) addTrailPoint(detection);
+    if (detection) {
+      updateMotion(detection, now);
+      addTrailPoint(detection, now);
+    } else {
+      handleMissingDetection(now);
+    }
+
     drawOverlay(detection);
+    updateTelemetry();
     updateFps(now);
   } catch (error) {
     console.error("Falha ao processar frame:", error);
@@ -359,7 +404,7 @@ function findBestCandidate(mask) {
         const centerY = moments.m01 / moments.m00;
         const radius = (bounds.width + bounds.height) / 4;
         const areaFill = area / (bounds.width * bounds.height);
-        const previousPoint = state.trail[state.trail.length - 1];
+        const previousPoint = state.motion.lastSample;
 
         const continuityBonus = previousPoint
           ? Math.max(
@@ -393,8 +438,87 @@ function findBestCandidate(mask) {
   return bestCandidate;
 }
 
-function addTrailPoint(detection) {
-  state.trail.push({ x: detection.x, y: detection.y });
+function updateMotion(detection, now) {
+  const motion = state.motion;
+  motion.detected = true;
+  motion.lastSeenAt = now;
+
+  if (!motion.lastSample) {
+    motion.lastSample = { x: detection.x, y: detection.y, time: now };
+    return;
+  }
+
+  const dt = (now - motion.lastSample.time) / 1000;
+  if (dt <= 0 || dt > 0.35) {
+    motion.lastSample = { x: detection.x, y: detection.y, time: now };
+    return;
+  }
+
+  const dx = detection.x - motion.lastSample.x;
+  const dy = detection.y - motion.lastSample.y;
+  const frameDistance = Math.hypot(dx, dy);
+  const rawSpeed = frameDistance / dt;
+  const maxReasonableSpeed = Math.min(processingCanvas.width, processingCanvas.height) * MAX_REASONABLE_SPEED_FACTOR;
+
+  if (rawSpeed > maxReasonableSpeed) {
+    motion.lastSample = { x: detection.x, y: detection.y, time: now };
+    return;
+  }
+
+  const jitterDeadZone = Math.max(0.8, detection.radius * 0.06);
+  const rawVx = frameDistance < jitterDeadZone ? 0 : dx / dt;
+  const rawVy = frameDistance < jitterDeadZone ? 0 : dy / dt;
+
+  motion.previousSpeed = motion.speed;
+  motion.vx = smooth(motion.vx, rawVx, VELOCITY_SMOOTHING);
+  motion.vy = smooth(motion.vy, rawVy, VELOCITY_SMOOTHING);
+  motion.speed = Math.hypot(motion.vx, motion.vy);
+
+  const rawAcceleration = (motion.speed - motion.previousSpeed) / dt;
+  motion.acceleration = smooth(
+    motion.acceleration,
+    rawAcceleration,
+    ACCELERATION_SMOOTHING,
+  );
+
+  if (!motion.moving && motion.speed >= MOTION_START_SPEED) {
+    motion.moving = true;
+  } else if (motion.moving && motion.speed <= MOTION_STOP_SPEED) {
+    motion.moving = false;
+  }
+
+  if (motion.moving) {
+    motion.distance += frameDistance;
+    motion.movingTime += dt;
+    motion.maxSpeed = Math.max(motion.maxSpeed, motion.speed);
+  }
+
+  motion.lastSample = { x: detection.x, y: detection.y, time: now };
+}
+
+function handleMissingDetection(now) {
+  const motion = state.motion;
+
+  if (motion.lastSeenAt && now - motion.lastSeenAt < LOST_DETECTION_MS) {
+    return;
+  }
+
+  motion.detected = false;
+  motion.moving = false;
+  motion.lastSample = null;
+  motion.vx = 0;
+  motion.vy = 0;
+  motion.speed = 0;
+  motion.previousSpeed = 0;
+  motion.acceleration = 0;
+}
+
+function smooth(previous, current, alpha) {
+  return previous + alpha * (current - previous);
+}
+
+function addTrailPoint(detection, now) {
+  state.trail.push({ x: detection.x, y: detection.y, time: now });
 
   if (state.trail.length > MAX_TRAIL_POINTS) {
     state.trail.shift();
@@ -405,26 +529,36 @@ function drawOverlay(detection = null) {
   const { width, height } = elements.overlay;
   overlayContext.clearRect(0, 0, width, height);
 
-  if (state.trail.length > 1) {
-    overlayContext.save();
-    overlayContext.lineCap = "round";
-    overlayContext.lineJoin = "round";
-    overlayContext.lineWidth = Math.max(2, width / 320);
-
-    for (let index = 1; index < state.trail.length; index += 1) {
-      const alpha = 0.12 + (index / state.trail.length) * 0.63;
-      overlayContext.strokeStyle = `rgba(124, 255, 174, ${alpha})`;
-      overlayContext.beginPath();
-      overlayContext.moveTo(state.trail[index - 1].x, state.trail[index - 1].y);
-      overlayContext.lineTo(state.trail[index].x, state.trail[index].y);
-      overlayContext.stroke();
-    }
-
-    overlayContext.restore();
-  }
+  drawTrail(width);
 
   if (!detection) return;
 
+  drawBallMarker(detection, width);
+  drawVelocityVector(detection);
+  drawMovingHud(detection, width, height);
+}
+
+function drawTrail(width) {
+  if (state.trail.length <= 1) return;
+
+  overlayContext.save();
+  overlayContext.lineCap = "round";
+  overlayContext.lineJoin = "round";
+  overlayContext.lineWidth = Math.max(2, width / 320);
+
+  for (let index = 1; index < state.trail.length; index += 1) {
+    const alpha = 0.12 + (index / state.trail.length) * 0.63;
+    overlayContext.strokeStyle = `rgba(124, 255, 174, ${alpha})`;
+    overlayContext.beginPath();
+    overlayContext.moveTo(state.trail[index - 1].x, state.trail[index - 1].y);
+    overlayContext.lineTo(state.trail[index].x, state.trail[index].y);
+    overlayContext.stroke();
+  }
+
+  overlayContext.restore();
+}
+
+function drawBallMarker(detection, width) {
   overlayContext.save();
   overlayContext.strokeStyle = "#7cffae";
   overlayContext.fillStyle = "#7cffae";
@@ -439,8 +573,147 @@ function drawOverlay(detection = null) {
   overlayContext.beginPath();
   overlayContext.arc(detection.x, detection.y, Math.max(2.4, width / 180), 0, Math.PI * 2);
   overlayContext.fill();
-
   overlayContext.restore();
+}
+
+function drawVelocityVector(detection) {
+  const { vx, vy, speed, moving } = state.motion;
+  if (!moving || speed < MOTION_STOP_SPEED) return;
+
+  const magnitude = Math.hypot(vx, vy);
+  if (!magnitude) return;
+
+  const ux = vx / magnitude;
+  const uy = vy / magnitude;
+  const vectorLength = Math.min(120, Math.max(detection.radius * 2.4, speed * 0.045));
+  const startOffset = detection.radius * 1.45;
+  const startX = detection.x + ux * startOffset;
+  const startY = detection.y + uy * startOffset;
+  const endX = startX + ux * vectorLength;
+  const endY = startY + uy * vectorLength;
+  const headLength = Math.min(13, Math.max(7, vectorLength * 0.18));
+  const angle = Math.atan2(uy, ux);
+
+  overlayContext.save();
+  overlayContext.strokeStyle = "rgba(255, 233, 128, 0.95)";
+  overlayContext.fillStyle = "rgba(255, 233, 128, 0.95)";
+  overlayContext.lineWidth = 2.4;
+  overlayContext.lineCap = "round";
+
+  overlayContext.beginPath();
+  overlayContext.moveTo(startX, startY);
+  overlayContext.lineTo(endX, endY);
+  overlayContext.stroke();
+
+  overlayContext.beginPath();
+  overlayContext.moveTo(endX, endY);
+  overlayContext.lineTo(
+    endX - headLength * Math.cos(angle - Math.PI / 6),
+    endY - headLength * Math.sin(angle - Math.PI / 6),
+  );
+  overlayContext.lineTo(
+    endX - headLength * Math.cos(angle + Math.PI / 6),
+    endY - headLength * Math.sin(angle + Math.PI / 6),
+  );
+  overlayContext.closePath();
+  overlayContext.fill();
+  overlayContext.restore();
+}
+
+function drawMovingHud(detection, width, height) {
+  const motion = state.motion;
+  const speedLabel = motion.moving ? `${Math.round(motion.speed)} px/s` : "PARADA";
+  const fontSize = Math.max(12, Math.min(17, width / 38));
+  const horizontalPadding = 9;
+  const hudHeight = fontSize + 12;
+
+  overlayContext.save();
+  overlayContext.font = `700 ${fontSize}px system-ui, sans-serif`;
+  const textWidth = overlayContext.measureText(speedLabel).width;
+  const hudWidth = textWidth + horizontalPadding * 2;
+
+  let x = detection.x - hudWidth / 2;
+  let y = detection.y - detection.radius * 1.8 - hudHeight - 7;
+
+  x = Math.max(5, Math.min(width - hudWidth - 5, x));
+  if (y < 5) y = detection.y + detection.radius * 1.8 + 7;
+  y = Math.max(5, Math.min(height - hudHeight - 5, y));
+
+  overlayContext.fillStyle = "rgba(2, 7, 4, 0.82)";
+  roundedRect(overlayContext, x, y, hudWidth, hudHeight, 8);
+  overlayContext.fill();
+  overlayContext.strokeStyle = motion.moving
+    ? "rgba(255, 233, 128, 0.72)"
+    : "rgba(124, 255, 174, 0.55)";
+  overlayContext.lineWidth = 1;
+  overlayContext.stroke();
+
+  overlayContext.fillStyle = motion.moving ? "#ffe980" : "#7cffae";
+  overlayContext.textAlign = "center";
+  overlayContext.textBaseline = "middle";
+  overlayContext.fillText(speedLabel, x + hudWidth / 2, y + hudHeight / 2 + 0.5);
+  overlayContext.restore();
+}
+
+function roundedRect(context, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + width, y, x + width, y + height, r);
+  context.arcTo(x + width, y + height, x, y + height, r);
+  context.arcTo(x, y + height, x, y, r);
+  context.arcTo(x, y, x + width, y, r);
+  context.closePath();
+}
+
+function updateTelemetry() {
+  const motion = state.motion;
+  const averageSpeed = motion.movingTime > 0 ? motion.distance / motion.movingTime : 0;
+  const gaugeScale = Math.max(500, Math.ceil(Math.max(motion.maxSpeed, motion.speed, 1) / 500) * 500);
+  const gaugePercent = Math.min(100, (motion.speed / gaugeScale) * 100);
+
+  elements.speedCurrent.textContent = String(Math.round(motion.speed));
+  elements.speedMax.textContent = `${Math.round(motion.maxSpeed)} px/s`;
+  elements.speedAverage.textContent = `${Math.round(averageSpeed)} px/s`;
+  elements.velocityX.textContent = `${formatSigned(motion.vx)} px/s`;
+  elements.velocityY.textContent = `${formatSigned(motion.vy)} px/s`;
+  elements.acceleration.textContent = `${formatSigned(motion.acceleration)} px/s²`;
+  elements.distanceTotal.textContent = `${Math.round(motion.distance)} px`;
+  elements.movingTime.textContent = `${motion.movingTime.toFixed(2)} s`;
+  elements.trailCount.textContent = `${state.trail.length}/${MAX_TRAIL_POINTS}`;
+  elements.speedGaugeFill.style.width = `${gaugePercent}%`;
+  elements.speedGaugeScale.textContent = `${gaugeScale} px/s`;
+
+  if (!motion.detected) {
+    elements.motionState.textContent = "SEM DETECÇÃO";
+    elements.motionState.dataset.mode = "lost";
+    elements.motionTrend.textContent = "Aguardando bola branca";
+    return;
+  }
+
+  if (!motion.moving) {
+    elements.motionState.textContent = "PARADA";
+    elements.motionState.dataset.mode = "stopped";
+    elements.motionTrend.textContent = "Bola estabilizada";
+    return;
+  }
+
+  elements.motionState.textContent = "MOVIMENTO";
+  elements.motionState.dataset.mode = "moving";
+
+  if (motion.acceleration > 120) {
+    elements.motionTrend.textContent = "↑ ACELERANDO";
+  } else if (motion.acceleration < -120) {
+    elements.motionTrend.textContent = "↓ DESACELERANDO";
+  } else {
+    elements.motionTrend.textContent = "→ VELOCIDADE ESTÁVEL";
+  }
+}
+
+function formatSigned(value) {
+  const rounded = Math.round(value);
+  if (Math.abs(rounded) < 1) return "0";
+  return rounded > 0 ? `+${rounded}` : String(rounded);
 }
 
 function updateFps(now) {
@@ -455,9 +728,11 @@ function updateFps(now) {
   }
 }
 
-function clearTrail() {
+function resetTracking() {
   state.trail.length = 0;
+  state.motion = createMotionState();
   drawOverlay();
+  updateTelemetry();
 }
 
 function stopStreamTracks() {
@@ -480,7 +755,7 @@ function stopCamera() {
   state.scheduledFrame = null;
   stopStreamTracks();
   releaseMats();
-  clearTrail();
+  resetTracking();
   elements.emptyState.classList.remove("hidden");
   elements.cameraButtonLabel.textContent = "Iniciar câmera";
   elements.cameraButton.disabled = !state.cvReady;
@@ -520,9 +795,10 @@ function tryOpenCvReady() {
 
 bindThresholdControls();
 elements.cameraButton.addEventListener("click", toggleCamera);
-elements.clearButton.addEventListener("click", clearTrail);
+elements.clearButton.addEventListener("click", resetTracking);
 window.addEventListener("opencv-ready", tryOpenCvReady, { once: true });
 window.addEventListener("opencv-error", markOpenCvError, { once: true });
 window.addEventListener("pagehide", stopCamera);
 
+updateTelemetry();
 tryOpenCvReady();
