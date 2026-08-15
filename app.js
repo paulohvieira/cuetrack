@@ -508,7 +508,10 @@ function tryOpenCvReady() {
   if (typeof cv === "undefined") return;
 
   if (typeof cv.then === "function") {
-    cv.then(() => markOpenCvReady()).catch(markOpenCvError);
+    cv.then((readyCv) => {
+      if (readyCv?.Mat) window.cv = readyCv;
+      markOpenCvReady();
+    }).catch(markOpenCvError);
     return;
   }
 
