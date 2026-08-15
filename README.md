@@ -14,11 +14,12 @@ GitHub Pages: `https://paulohvieira.github.io/cuetrack/`
 - vídeo com Canvas sobreposto;
 - OpenCV.js para processamento local;
 - segmentação da bola branca em HSV;
+- ajuste rápido: toque na bola para calibrar automaticamente os thresholds HSV;
+- ajuste manual HSV mantido como opção avançada;
 - contornos filtrados por área, tamanho, proporção e circularidade;
 - centro X,Y e raio da melhor candidata;
 - trajetória das últimas 100 posições;
 - FPS em tempo real;
-- thresholds HSV ajustáveis;
 - processamento limitado a 640 px de largura e 30 FPS;
 - velocidade instantânea em `px/s`;
 - velocidade máxima e média;
@@ -30,6 +31,14 @@ GitHub Pages: `https://paulohvieira.github.io/cuetrack/`
 - velocímetro visual;
 - HUD de velocidade que acompanha a bola;
 - vetor de velocidade desenhado sobre o vídeo.
+
+## Ajuste rápido da bola
+
+Com a câmera ligada, toque em **Encontrar bola** e depois toque próximo ao centro da bola branca.
+
+CueTrack analisa uma pequena região ao redor do toque, prioriza os pixels mais claros e menos saturados e calcula automaticamente os limites de saturação e brilho. Para uma bola branca, o canal de matiz permanece aberto (`H 0–179`) porque a matiz de tons quase brancos é pouco estável.
+
+Os valores calculados também aparecem nos controles de **Ajuste avançado HSV**, então ainda é possível fazer um refinamento manual quando necessário.
 
 ## Telemetria de velocidade
 
@@ -55,10 +64,12 @@ A velocidade permanece em pixels por segundo porque esta versão ainda não poss
 1. Abra a aplicação no Chrome Android por HTTPS.
 2. Toque em **Iniciar câmera**.
 3. Autorize o acesso à câmera traseira.
-4. Aponte a câmera para a mesa mantendo a bola branca visível.
-5. Ajuste HSV se necessário.
-6. Movimente a bola e acompanhe velocidade, vetor, máximas, médias, distância e tempo.
-7. Use **Limpar trajetória** para zerar trajetória e telemetria da sessão.
+4. Toque em **Encontrar bola**.
+5. Toque no centro da bola branca na imagem.
+6. Aguarde a confirmação **Bola ajustada**.
+7. Movimente a bola e acompanhe velocidade, vetor, máximas, médias, distância e tempo.
+8. Se precisar, use **Ajuste avançado HSV** para refinamento manual.
+9. Use **Limpar trajetória** para zerar trajetória e telemetria da sessão.
 
 Valores HSV iniciais:
 
@@ -106,7 +117,10 @@ A presença de `.nojekyll` evita processamento desnecessário pelo Jekyll. Todos
 ├── .nojekyll
 ├── index.html
 ├── styles.css
+├── quick-find.css
 ├── app.js
+├── quick-find.js
+├── mobile-hud.js
 └── README.md
 ```
 
