@@ -10,6 +10,7 @@
     <meta name="theme-color" content="#07110d" />
     <title>CueTrack — rastreamento e velocidade da bola branca</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./quick-find.css?v=1" />
   </head>
   <body>
     <header class="app-header">
@@ -25,6 +26,12 @@
         <div id="camera-stage" class="camera-stage">
           <video id="camera" playsinline muted aria-label="Imagem da câmera traseira"></video>
           <canvas id="overlay" aria-label="Detecção, trajetória e vetor de velocidade da bola branca"></canvas>
+
+          <div id="quick-find-hint" class="quick-find-hint" data-mode="finding" aria-live="polite">
+            <strong id="quick-find-title">Toque na bola branca</strong>
+            <span id="quick-find-detail">Toque próximo ao centro da bola</span>
+          </div>
+          <div id="quick-find-marker" class="quick-find-marker" aria-hidden="true"></div>
 
           <div id="empty-state" class="empty-state">
             <div class="target-mark" aria-hidden="true"></div>
@@ -100,6 +107,10 @@
             <span class="camera-icon" aria-hidden="true"></span>
             <span id="camera-button-label">Iniciar câmera</span>
           </button>
+          <button id="find-ball-button" class="button button-secondary" type="button" disabled>
+            <span class="target-icon-small" aria-hidden="true"></span>
+            <span id="find-ball-button-label">Encontrar bola</span>
+          </button>
           <button id="clear-button" class="button button-secondary" type="button" disabled>
             Limpar trajetória
           </button>
@@ -109,8 +120,8 @@
       <details class="settings-panel">
         <summary>
           <span>
-            <strong>Ajustar detecção HSV</strong>
-            <small>Use se a bola não for identificada</small>
+            <strong>Ajuste avançado HSV</strong>
+            <small>Use apenas para ajuste fino</small>
           </span>
           <span class="chevron" aria-hidden="true"></span>
         </summary>
@@ -183,6 +194,7 @@
       onerror="window.__opencvLoadFailed = true; window.dispatchEvent(new Event('opencv-error'))"
     ></script>
     <script defer src="./app.js"></script>
+    <script defer src="./quick-find.js?v=1"></script>
     <script defer src="./mobile-hud.js?v=3"></script>
   </body>
 </html>
