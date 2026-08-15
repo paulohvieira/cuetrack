@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="CueTrack rastreia localmente a bola branca de uma mesa de sinuca usando a câmera do celular."
+    />
+    <meta name="theme-color" content="#07110d" />
+    <title>CueTrack — rastreamento da bola branca</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">RASTREAMENTO LOCAL</p>
+        <h1>Cue<span>Track</span></h1>
+      </div>
+      <div class="fps" aria-live="polite"><strong id="fps-value">0</strong><span>FPS</span></div>
+    </header>
+
+    <main>
+      <section class="camera-panel" aria-label="Visualização da câmera">
+        <div id="camera-stage" class="camera-stage">
+          <video id="camera" playsinline muted aria-label="Imagem da câmera traseira"></video>
+          <canvas id="overlay" aria-label="Detecção e trajetória da bola branca"></canvas>
+
+          <div id="empty-state" class="empty-state">
+            <div class="target-mark" aria-hidden="true"></div>
+            <p>Aponte a câmera para a mesa de sinuca</p>
+            <span>A detecção acontece somente neste dispositivo.</span>
+          </div>
+
+          <div class="status-bar">
+            <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+            <span id="status-text" role="status">Carregando visão computacional…</span>
+          </div>
+        </div>
+
+        <div class="primary-actions">
+          <button id="camera-button" class="button button-primary" type="button" disabled>
+            <span class="camera-icon" aria-hidden="true"></span>
+            <span id="camera-button-label">Iniciar câmera</span>
+          </button>
+          <button id="clear-button" class="button button-secondary" type="button" disabled>
+            Limpar trajetória
+          </button>
+        </div>
+      </section>
+
+      <details class="settings-panel">
+        <summary>
+          <span>
+            <strong>Ajustar detecção HSV</strong>
+            <small>Use se a bola não for identificada</small>
+          </span>
+          <span class="chevron" aria-hidden="true"></span>
+        </summary>
+
+        <div class="settings-content">
+          <p class="settings-help">
+            Para objetos brancos, mantenha a saturação baixa e o brilho alto.
+          </p>
+
+          <div class="range-group" data-channel="h">
+            <div class="range-heading">
+              <label>Matiz (H)</label>
+              <output id="h-output">0 — 179</output>
+            </div>
+            <div class="dual-controls">
+              <label for="h-min">Mín.</label>
+              <input id="h-min" type="range" min="0" max="179" value="0" />
+              <label for="h-max">Máx.</label>
+              <input id="h-max" type="range" min="0" max="179" value="179" />
+            </div>
+          </div>
+
+          <div class="range-group" data-channel="s">
+            <div class="range-heading">
+              <label>Saturação (S)</label>
+              <output id="s-output">0 — 80</output>
+            </div>
+            <div class="dual-controls">
+              <label for="s-min">Mín.</label>
+              <input id="s-min" type="range" min="0" max="255" value="0" />
+              <label for="s-max">Máx.</label>
+              <input id="s-max" type="range" min="0" max="255" value="80" />
+            </div>
+          </div>
+
+          <div class="range-group" data-channel="v">
+            <div class="range-heading">
+              <label>Brilho (V)</label>
+              <output id="v-output">180 — 255</output>
+            </div>
+            <div class="dual-controls">
+              <label for="v-min">Mín.</label>
+              <input id="v-min" type="range" min="0" max="255" value="180" />
+              <label for="v-max">Máx.</label>
+              <input id="v-max" type="range" min="0" max="255" value="255" />
+            </div>
+          </div>
+
+          <div class="legend" aria-label="Legenda da sobreposição">
+            <span><i class="legend-ring"></i>Bola detectada</span>
+            <span><i class="legend-line"></i>Trajetória (100 posições)</span>
+          </div>
+        </div>
+      </details>
+    </main>
+
+    <footer>Sem uploads · Sem backend · Processamento 100% local</footer>
+
+    <script>
+      window.Module = {
+        onRuntimeInitialized() {
+          window.dispatchEvent(new Event("opencv-ready"));
+        },
+      };
+    </script>
+    <script
+      async
+      src="https://docs.opencv.org/4.x/opencv.js"
+      onerror="window.__opencvLoadFailed = true; window.dispatchEvent(new Event('opencv-error'))"
+    ></script>
+    <script defer src="./app.js"></script>
+  </body>
+</html>
