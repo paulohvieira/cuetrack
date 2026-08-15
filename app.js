@@ -2,8 +2,8 @@
 
 const MAX_TRAIL_POINTS = 100;
 const MAX_PROCESSING_WIDTH = 640;
-// A pequena margem evita descartar frames de câmeras de 30 FPS por variação no timestamp.
-const TARGET_FRAME_TIME = 1000 / 31;
+const TARGET_FPS = 30;
+const TARGET_FRAME_TIME = 1000 / TARGET_FPS;
 
 const elements = {
   video: document.querySelector("#camera"),
@@ -90,6 +90,68 @@ function bindThresholdControls() {
   }
 }
 
+async function getCameraStream() {
+  const baseVideoConstraints = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: TARGET_FPS, max: TARGET_FPS },
+  };
+
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        ...baseVideoConstraints,
+        facingMode: { exact: "environment" },
+      },
+    });
+  } catch (error) {
+    if (error?.name !== "OverconstrainedError" && error?.name !== "NotFoundError") {
+      throw error;
+    }
+
+    return navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        ...baseVideoConstraints,
+        facingMode: { ideal: "environment" },
+      },
+    });
+  }
+}
+
+function waitForVideoMetadata() {
+  if (elements.video.videoWidth > 0 && elements.video.videoHeight > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      elements.video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      elements.video.removeEventListener("error", handleError);
+    };
+
+    const handleLoadedMetadata = () => {
+      cleanup();
+      resolve();
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Falha ao carregar o vídeo da câmera"));
+    };
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error("Tempo limite aguardando metadados da câmera"));
+    }, 4000);
+
+    elements.video.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
+    elements.video.addEventListener("error", handleError, { once: true });
+  });
+}
+
 async function startCamera() {
   if (!state.cvReady || state.running) return;
 
@@ -102,18 +164,11 @@ async function startCamera() {
   setStatus("Solicitando câmera traseira…");
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30, max: 30 },
-      },
-    });
+    const stream = await getCameraStream();
 
     state.stream = stream;
     elements.video.srcObject = stream;
+    await waitForVideoMetadata();
     await elements.video.play();
 
     configureProcessingSize();
@@ -130,6 +185,7 @@ async function startCamera() {
     setStatus("Rastreando bola branca", "active");
     scheduleNextFrame();
   } catch (error) {
+    console.error("Falha ao iniciar câmera:", error);
     stopStreamTracks();
     elements.cameraButton.disabled = false;
     setStatus(cameraErrorMessage(error), "error");
@@ -140,12 +196,13 @@ function cameraErrorMessage(error) {
   if (error?.name === "NotAllowedError") return "Permissão da câmera negada";
   if (error?.name === "NotFoundError") return "Nenhuma câmera encontrada";
   if (error?.name === "NotReadableError") return "A câmera já está em uso";
+  if (error?.name === "SecurityError") return "A câmera exige uma conexão HTTPS";
   return "Não foi possível iniciar a câmera";
 }
 
 function configureProcessingSize() {
-  const sourceWidth = elements.video.videoWidth || 1280;
-  const sourceHeight = elements.video.videoHeight || 720;
+  const sourceWidth = elements.video.videoWidth;
+  const sourceHeight = elements.video.videoHeight;
   const scale = Math.min(1, MAX_PROCESSING_WIDTH / sourceWidth);
   const width = Math.max(1, Math.round(sourceWidth * scale));
   const height = Math.max(1, Math.round(sourceHeight * scale));
@@ -162,6 +219,7 @@ function allocateMats() {
 
   const rows = processingCanvas.height;
   const cols = processingCanvas.width;
+
   state.mats = {
     rgb: new cv.Mat(rows, cols, cv.CV_8UC3),
     hsv: new cv.Mat(rows, cols, cv.CV_8UC3),
@@ -170,6 +228,7 @@ function allocateMats() {
     high: new cv.Mat(rows, cols, cv.CV_8UC3),
     kernel: cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3)),
   };
+
   state.thresholdsDirty = true;
 }
 
@@ -221,6 +280,7 @@ function processFrame(now) {
       cv.cvtColor(state.mats.rgb, state.mats.hsv, cv.COLOR_RGB2HSV);
       updateThresholdMats();
       cv.inRange(state.mats.hsv, state.mats.low, state.mats.high, state.mats.mask);
+
       cv.morphologyEx(
         state.mats.mask,
         state.mats.mask,
@@ -233,6 +293,7 @@ function processFrame(now) {
         cv.MORPH_CLOSE,
         state.mats.kernel,
       );
+
       detection = findBestCandidate(state.mats.mask);
     } finally {
       source.delete();
@@ -298,7 +359,8 @@ function findBestCandidate(mask) {
         const centerY = moments.m01 / moments.m00;
         const radius = (bounds.width + bounds.height) / 4;
         const areaFill = area / (bounds.width * bounds.height);
-        const previousPoint = state.trail.at(-1);
+        const previousPoint = state.trail[state.trail.length - 1];
+
         const continuityBonus = previousPoint
           ? Math.max(
               0,
@@ -307,11 +369,17 @@ function findBestCandidate(mask) {
                   (Math.min(mask.rows, mask.cols) * 0.35),
             )
           : 0;
+
         const score = circularity * 4 + areaFill + continuityBonus * 0.7;
 
         if (score > bestScore) {
           bestScore = score;
-          bestCandidate = { x: centerX, y: centerY, radius };
+          bestCandidate = {
+            x: centerX,
+            y: centerY,
+            radius,
+            circularity,
+          };
         }
       } finally {
         contour.delete();
@@ -327,7 +395,10 @@ function findBestCandidate(mask) {
 
 function addTrailPoint(detection) {
   state.trail.push({ x: detection.x, y: detection.y });
-  if (state.trail.length > MAX_TRAIL_POINTS) state.trail.shift();
+
+  if (state.trail.length > MAX_TRAIL_POINTS) {
+    state.trail.shift();
+  }
 }
 
 function drawOverlay(detection = null) {
@@ -348,6 +419,7 @@ function drawOverlay(detection = null) {
       overlayContext.lineTo(state.trail[index].x, state.trail[index].y);
       overlayContext.stroke();
     }
+
     overlayContext.restore();
   }
 
@@ -359,12 +431,15 @@ function drawOverlay(detection = null) {
   overlayContext.lineWidth = Math.max(2, width / 240);
   overlayContext.shadowColor = "rgba(66, 227, 141, 0.7)";
   overlayContext.shadowBlur = 10;
+
   overlayContext.beginPath();
   overlayContext.arc(detection.x, detection.y, detection.radius * 1.18, 0, Math.PI * 2);
   overlayContext.stroke();
+
   overlayContext.beginPath();
   overlayContext.arc(detection.x, detection.y, Math.max(2.4, width / 180), 0, Math.PI * 2);
   overlayContext.fill();
+
   overlayContext.restore();
 }
 
@@ -408,14 +483,18 @@ function stopCamera() {
   clearTrail();
   elements.emptyState.classList.remove("hidden");
   elements.cameraButtonLabel.textContent = "Iniciar câmera";
+  elements.cameraButton.disabled = !state.cvReady;
   elements.clearButton.disabled = true;
   elements.fpsValue.textContent = "0";
 
-  if (state.cvReady) setStatus("Pronto para iniciar", "ready");
+  if (state.cvReady) {
+    setStatus("Pronto para iniciar", "ready");
+  }
 }
 
 function releaseMats() {
   if (!state.mats) return;
+
   Object.values(state.mats).forEach((mat) => mat?.delete());
   state.mats = null;
 }
@@ -425,12 +504,25 @@ function toggleCamera() {
   else startCamera();
 }
 
+function tryOpenCvReady() {
+  if (typeof cv === "undefined") return;
+
+  if (typeof cv.then === "function") {
+    cv.then((readyCv) => {
+      if (readyCv?.Mat) window.cv = readyCv;
+      markOpenCvReady();
+    }).catch(markOpenCvError);
+    return;
+  }
+
+  markOpenCvReady();
+}
+
 bindThresholdControls();
 elements.cameraButton.addEventListener("click", toggleCamera);
 elements.clearButton.addEventListener("click", clearTrail);
-window.addEventListener("opencv-ready", markOpenCvReady, { once: true });
+window.addEventListener("opencv-ready", tryOpenCvReady, { once: true });
 window.addEventListener("opencv-error", markOpenCvError, { once: true });
 window.addEventListener("pagehide", stopCamera);
 
-if (typeof cv !== "undefined" && cv.Mat) markOpenCvReady();
-else if (window.__opencvLoadFailed) markOpenCvError();
+tryOpenCvReady();

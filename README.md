@@ -1,77 +1,113 @@
 # CueTrack
 
-CueTrack é um MVP web mobile-first que usa a câmera traseira de um smartphone para rastrear, em tempo real, a bola branca de uma mesa de sinuca.
+CueTrack é um MVP web mobile-first para rastrear, em tempo real, a bola branca de uma mesa de sinuca usando a câmera traseira de um smartphone.
 
-Todo o processamento acontece localmente no navegador. O vídeo não é gravado, enviado ou processado por um servidor.
+Todo o processamento acontece localmente no navegador. Não há backend, upload de vídeo ou telemetria.
 
-## Funcionalidades
+## Demo
+
+GitHub Pages: `https://paulohvieira.github.io/cuetrack/`
+
+## MVP atual
 
 - acesso à câmera traseira pelo Chrome Android;
-- vídeo com Canvas sobreposto;
-- segmentação da bola branca no espaço de cor HSV com OpenCV.js;
-- filtro de contornos por área, tamanho, proporção e circularidade;
-- marcação do contorno e do centro da melhor candidata;
-- trajetória das últimas 100 posições relevantes;
+- vídeo ocupando a área principal da interface;
+- Canvas sobreposto ao vídeo;
+- processamento com OpenCV.js;
+- conversão RGB → HSV;
+- segmentação da bola branca por thresholds HSV ajustáveis;
+- busca de contornos candidatos;
+- filtros por área, tamanho, proporção e circularidade;
+- seleção da melhor candidata com pequeno bônus de continuidade espacial;
+- cálculo do centro X,Y;
+- círculo e ponto central sobre a bola detectada;
+- armazenamento das últimas 100 posições;
+- desenho da trajetória;
 - contador de FPS;
-- limpeza manual da trajetória;
-- ajuste dos limites mínimos e máximos de H, S e V;
-- processamento limitado a 640 px de largura e 30 FPS para reduzir o custo no celular.
+- botão para limpar a trajetória;
+- processamento limitado a 640 px de largura e 30 FPS para reduzir carga no smartphone.
 
-## Executar localmente
+## Como usar
 
-O acesso à câmera exige um contexto seguro. Use `localhost` durante o desenvolvimento em vez de abrir o arquivo diretamente:
+1. Abra a aplicação no Chrome Android por HTTPS.
+2. Toque em **Iniciar câmera**.
+3. Autorize o acesso à câmera.
+4. Aponte a câmera para a mesa mantendo a bola branca visível.
+5. Se necessário, abra **Ajustar detecção HSV** e ajuste os limites.
+6. Use **Limpar trajetória** para apagar o rastro acumulado.
+
+Valores HSV iniciais:
+
+| Canal | Mínimo | Máximo |
+| --- | ---: | ---: |
+| H | 0 | 179 |
+| S | 0 | 80 |
+| V | 180 | 255 |
+
+Para objetos brancos, normalmente funciona melhor manter a saturação baixa e o brilho alto.
+
+## Execução local
+
+O acesso à câmera exige contexto seguro. Em desenvolvimento, `localhost` é permitido:
 
 ```bash
 python -m http.server 8000
 ```
 
-Depois, abra `http://localhost:8000` no navegador. Para testar em um celular pela rede local, use HTTPS (ou publique temporariamente no GitHub Pages), porque o Chrome bloqueia a câmera em origens HTTP que não sejam `localhost`.
+Depois abra:
 
-O OpenCV.js é carregado do CDN oficial e, por isso, a primeira abertura requer conexão com a internet.
+```text
+http://localhost:8000
+```
 
-## Como usar
+Para testar pelo celular usando o IP da máquina na rede local, HTTP simples normalmente não é suficiente para `getUserMedia`. Use HTTPS ou o GitHub Pages.
 
-1. Abra a aplicação no Chrome Android.
-2. Toque em **Iniciar câmera** e permita o acesso.
-3. Aponte a câmera traseira para a mesa, mantendo a bola branca visível.
-4. Se necessário, abra **Ajustar detecção HSV**. Para uma bola branca, use saturação baixa e brilho alto.
-5. Toque em **Limpar trajetória** para reiniciar o rastro.
+O OpenCV.js é carregado do CDN oficial, portanto a primeira abertura requer conexão com a internet.
 
-Os valores iniciais são:
+## GitHub Pages
 
-| Canal | Mínimo | Máximo |
-| --- | ---: | ---: |
-| H (matiz) | 0 | 179 |
-| S (saturação) | 0 | 80 |
-| V (brilho) | 180 | 255 |
+O projeto é totalmente estático e não possui etapa de build.
 
-## Publicar no GitHub Pages
+A publicação deste repositório está configurada a partir de:
 
-O projeto é totalmente estático e não precisa de build.
+```text
+branch: main
+pasta: /
+```
 
-1. Envie os arquivos para um repositório no GitHub.
-2. Em **Settings → Pages**, selecione **Deploy from a branch**.
-3. Escolha a branch `main`, a pasta `/ (root)` e salve.
-4. Abra a URL HTTPS fornecida pelo GitHub Pages no Chrome Android.
+A presença de `.nojekyll` evita processamento desnecessário pelo Jekyll.
 
-Os caminhos dos recursos são relativos, então a aplicação funciona tanto em um domínio raiz quanto em uma URL de projeto, como `usuario.github.io/cue-track/`.
+Todos os caminhos utilizados pela aplicação são relativos, portanto funcionam corretamente em `paulohvieira.github.io/cuetrack/`.
 
 ## Estrutura
 
 ```text
 .
-├── index.html   # interface e carregamento do OpenCV.js
-├── styles.css   # layout responsivo mobile-first
-├── app.js       # câmera, visão computacional e desenho no Canvas
+├── .nojekyll
+├── index.html
+├── styles.css
+├── app.js
 └── README.md
 ```
 
-## Escopo atual
+O projeto permanece intencionalmente pequeno: HTML5, CSS, JavaScript puro, Canvas e OpenCV.js.
 
-Esta primeira versão detecta apenas a bola branca. Ainda não inclui outras bolas, previsão de trajetória, colisões, velocidade em m/s ou calibração dimensional.
+## Escopo não implementado
 
-Reflexos fortes, tacos, bordas claras e partes brancas do ambiente podem gerar falsos positivos. Iluminação uniforme, câmera estável e enquadramento predominante do pano melhoram o resultado.
+Esta versão não inclui:
+
+- rastreamento das outras bolas;
+- previsão de trajetória;
+- detecção de colisões;
+- cálculo de velocidade em m/s;
+- calibração dimensional.
+
+## Limitações conhecidas
+
+A detecção atual é baseada principalmente em cor e geometria. Reflexos, tacos, bordas claras e objetos brancos podem gerar falsos positivos.
+
+Iluminação uniforme, câmera relativamente estável e enquadramento predominante do pano da mesa tendem a melhorar o resultado.
 
 ## Privacidade
 
-`getUserMedia`, OpenCV.js e Canvas operam no próprio navegador. O projeto não possui backend, telemetria, armazenamento ou upload de imagens.
+`getUserMedia`, OpenCV.js e Canvas operam no próprio navegador. Nenhum frame é enviado para servidor pelo CueTrack.
